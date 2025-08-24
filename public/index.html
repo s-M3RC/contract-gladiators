@@ -41,6 +41,9 @@
       .auth-toggle { font-size: 14px; margin-top: 20px; text-align: center; }
       .auth-toggle a { color: #039be5; text-decoration: none; font-weight: 500; }
       .auth-toggle a:hover { text-decoration: underline; }
+      /* Simple loading spinner */
+      .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       @media (max-width: 600px) {
         body, #message { margin-top: 0; background: white; box-shadow: none; }
         body { border-top: 16px solid #ffa100; }
@@ -76,6 +79,54 @@
         <p id="user-email"></p>
         <p id="user-created-at"></p>
         <button id="logout-button">Logout</button>
+        
+        <!-- Tabs -->
+        <div class="border-b border-gray-200 mt-6">
+          <nav class="-mb-px flex space-x-8" id="main-tabs" aria-label="Tabs">
+            <a href="#" class="tab-link border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="contracts">My Active Contracts</a>
+            <a href="#" class="tab-link border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="market">Player Market</a>
+            <a href="#" class="tab-link border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="auction">Auction</a>
+            <a href="#" class="tab-link border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="leaderboard">Leaderboard</a>
+          </nav>
+        </div>
+
+        <!-- Tab Content -->
+        <div id="tab-content" class="mt-6">
+          <div id="tab-pane-contracts" class="tab-pane">
+            <div class="flex justify-between items-baseline mb-4">
+              <h3 class="text-xl font-bold">My Active Contracts</h3>
+              <p class="text-lg">Remaining Budget: <span class="font-bold text-green-600" id="remaining-budget">$100,000</span></p>
+            </div>
+            <div id="contract-list">
+              <!-- Active contracts will be displayed here -->
+              <p class="text-gray-500">No active contracts.</p>
+            </div>
+            <h3 class="text-xl font-bold mb-4 border-t pt-4 mt-8">Expired Contracts</h3>
+            <div id="expired-contract-list">
+              <p class="text-gray-500">No expired contracts.</p>
+            </div>
+          </div>
+
+          <div id="tab-pane-market" class="tab-pane hidden">
+            <h3 class="text-xl font-bold mb-4">Player Market</h3>
+            <input type="text" id="player-search" placeholder="Search players by name..." class="w-full p-2 mb-4 border rounded-lg" style="display: none;">
+            <div id="player-list-loading" class="flex items-center">
+              <div class="loader mr-3"></div>
+              <span>The Player market is loading...</span>
+            </div>
+            <div id="player-list" class="flex overflow-x-auto space-x-4 pb-4 -mx-6 px-6"></div>
+          </div>
+
+          <div id="tab-pane-auction" class="tab-pane hidden">
+            <h3 class="text-xl font-bold mb-4">Auction</h3>
+            <p class="text-gray-500">The player auction is not yet open. Check back soon!</p>
+          </div>
+
+          <div id="tab-pane-leaderboard" class="tab-pane hidden">
+            <h3 class="text-xl font-bold mb-4">Leaderboard</h3>
+            <p class="text-gray-500">The leaderboard is not yet available.</p>
+          </div>
+        </div>
       </div>
     </div>
     <p id="load">Firebase SDK Loading&hellip;</p>
@@ -113,6 +164,33 @@
           const signupSection = document.getElementById('signup-section');
           const goToSignup = document.getElementById('go-to-signup');
           const goToLogin = document.getElementById('go-to-login');
+          const playerListLoading = document.getElementById('player-list-loading');
+          const playerSearch = document.getElementById('player-search');
+          const playerList = document.getElementById('player-list');
+
+          // --- Tab Switching Logic ---
+          const tabs = document.querySelectorAll('.tab-link');
+          const panes = document.querySelectorAll('.tab-pane');
+
+          tabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+              e.preventDefault();
+
+              // Deactivate all tabs and panes
+              tabs.forEach(t => {
+                t.classList.remove('border-indigo-500', 'text-indigo-600');
+                t.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+              });
+              panes.forEach(p => p.classList.add('hidden'));
+
+              // Activate the clicked tab and its pane
+              tab.classList.add('border-indigo-500', 'text-indigo-600');
+              tab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+              const tabName = tab.dataset.tab;
+              document.getElementById(`tab-pane-${tabName}`).classList.remove('hidden');
+            });
+          });
+
 
           // --- Auth Form Toggling ---
           goToSignup.addEventListener('click', (e) => {
@@ -172,6 +250,120 @@
             auth.signOut();
           });
 
+          // --- Player Market ---
+          let allPlayers = []; // Store all fetched players
+
+          function renderPlayers(playersToRender) {
+            playerList.innerHTML = '';
+            if (playersToRender.length === 0) {
+              playerList.innerHTML = '<p class="text-gray-500">No players found.</p>';
+              return;
+            }
+            playersToRender.forEach(player => {
+              const playerCard = document.createElement('div');
+              playerCard.className = 'flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg shadow-md p-4 space-y-2';
+              playerCard.innerHTML = `
+                <div class="flex justify-between items-center">
+                  <h4 class="text-lg font-bold text-gray-900 truncate" title="${player.full_name || ''}">${player.full_name || 'Unknown Player'}</h4>
+                  <span class="text-sm font-medium text-gray-500">${player.position || 'N/A'}</span>
+                </div>
+                <div class="flex justify-between items-baseline">
+                  <p class="text-2xl font-bold text-green-600">${player.price}</p>
+                  <p class="text-xs text-gray-500">Proj. Pts: ${player.projectedPoints.toFixed(2)}</p>
+                </div>
+                <div class="text-sm text-gray-600 space-y-1 pt-2 border-t border-gray-200">
+                  <p><strong>Team:</strong> ${player.team || 'Free Agent'}</p>
+                  <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
+                  <p><strong>Exp:</strong> ${player.years_exp != null ? player.years_exp : 'N/A'} years</p>
+                  <p><strong>Contract:</strong> 1 Week / Proj. Val: ${player.projectedPoints.toFixed(2)}</p>
+                </div>
+              `;
+              playerList.appendChild(playerCard);
+            });
+          }
+
+          async function fetchAndDisplayPlayers() {
+            playerList.innerHTML = '';
+            playerListLoading.style.display = 'flex';
+            playerSearch.style.display = 'none'; // Hide search while loading
+
+            const positionMap = {
+              1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'D/ST'
+            };
+            const teamMap = {
+              0: 'Free Agent', 1: 'ATL', 2: 'BUF', 3: 'CHI', 4: 'CIN', 5: 'CLE',
+              6: 'DAL', 7: 'DEN', 8: 'DET', 9: 'GB', 10: 'TEN', 11: 'IND',
+              12: 'KC', 13: 'LV', 14: 'LAR', 15: 'MIA', 16: 'MIN', 17: 'NE',
+              18: 'NO', 19: 'NYG', 20: 'NYJ', 21: 'PHI', 22: 'ARI', 23: 'PIT',
+              24: 'LAC', 25: 'SF', 26: 'SEA', 27: 'TB', 28: 'WAS', 29: 'CAR',
+              30: 'JAX', 33: 'BAL', 34: 'HOU'
+            };
+
+            try {
+              const season = new Date().getFullYear();
+              const response = await fetch(`https://fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leaguedefaults/1?view=kona_player_info`);
+              if (!response.ok) throw new Error('Could not fetch player data from ESPN');
+              const data = await response.json();
+
+              const currentWeek = data.scoringPeriodId;
+
+              allPlayers = data.players.map(({ player }) => {
+                  if (!player) return null;
+
+                  const position = positionMap[player.defaultPositionId];
+                  // Filter out players with positions not in our map (e.g., defensive players)
+                  if (!position) return null;
+
+                  const team = teamMap[player.proTeamId] || 'N/A';
+
+                  // Find the stats for the current week's projections.
+                  // statSourceId: 0 = actual, 1 = projected
+                  const projectedStat = player.stats.find(
+                    (s) => s.scoringPeriodId === currentWeek && s.statSourceId === 1
+                  );
+                  const projectedPoints = projectedStat ? projectedStat.appliedTotal : 0;
+
+                  // Skip players with no or zero projection for the week
+                  if (projectedPoints <= 0) return null;
+
+                  const price = Math.round(projectedPoints * 1000);
+                  const formattedPrice = `$${price.toLocaleString()}`;
+
+                  return {
+                    full_name: player.fullName,
+                    position: position,
+                    team: team,
+                    age: player.age || 'N/A',
+                    years_exp: player.experience != null ? player.experience : 'N/A',
+                    projectedPoints: projectedPoints,
+                    price: formattedPrice,
+                    height: 'N/A', // Not available in this ESPN endpoint
+                    weight: 'N/A'  // Not available in this ESPN endpoint
+                  };
+                })
+                .filter(p => p !== null) // Remove null entries from players that were skipped
+                .sort((a, b) => b.projectedPoints - a.projectedPoints);
+
+              renderPlayers(allPlayers);
+              playerSearch.style.display = 'block';
+
+            } catch (error) {
+              playerList.innerHTML = `<p class="text-red-500 col-span-full">Could not load player data: ${error.message}</p>`;
+              console.error('Player fetch error:', error);
+            } finally {
+              playerListLoading.style.display = 'none';
+            }
+          }
+
+          // Handle search input
+          playerSearch.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filteredPlayers = allPlayers.filter(player => 
+              player.full_name && player.full_name.toLowerCase().includes(searchTerm)
+            );
+            renderPlayers(filteredPlayers);
+          });
+
           // Listen for auth state changes to update the UI
           auth.onAuthStateChanged(user => {
             if (user) {
@@ -192,6 +384,9 @@
                   userEmailEl.textContent = `Email: ${user.email}`;
                 }
               });
+
+              // Fetch and display players
+              fetchAndDisplayPlayers();
             } else {
               // User is signed out.
               authContainer.style.display = 'block';
@@ -201,8 +396,13 @@
               signupSection.style.display = 'none';
               loginForm.reset();
               signupForm.reset();
+              playerList.innerHTML = ''; // Clear player list on logout
+              playerSearch.value = ''; // Clear search input on logout
+              playerSearch.style.display = 'none';
               userEmailEl.textContent = '';
               userCreatedAtEl.textContent = '';
+              // Reset to the first tab on logout
+              document.querySelector('.tab-link[data-tab="contracts"]').click();
               errorMessage.textContent = '';
             }
           });

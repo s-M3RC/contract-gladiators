@@ -6,3 +6,9 @@ client_secret_*.json
 firebase.json.local
 firebase-debug.log
 firestore-debug.log
+
+# build output
+/dist/
+
+# dependencies
+/node_modules/
