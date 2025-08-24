@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Contract Gladiator - Sign Up</title>
+
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/12.1.0/firebase-app-compat.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/12.1.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-database-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.1.0/firebase-performance-compat.js"></script>
+    <!-- 
+      initialize the SDK after all desired features are loaded, set useEmulator to false
+      to avoid connecting the SDK to running emulators.
+    -->
+    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+
+    <style media="screen">
+      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+      #message { background: white; max-width: 400px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
+      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
+      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
+      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
+      #message, #message button { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
+      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
+      #auth-container input { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+      #auth-container button, #user-dashboard button { width: 100%; padding: 10px; background-color: #039be5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; text-transform: uppercase; }
+      #auth-container button:hover, #user-dashboard button:hover { background-color: #0277bd; }
+      #error-message { color: red; font-size: 14px; margin-top: 16px; min-height: 1em; }
+      #user-dashboard button { background: #d32f2f; }
+      #user-dashboard button:hover { background: #c62828; }
+      .auth-toggle { font-size: 14px; margin-top: 20px; text-align: center; }
+      .auth-toggle a { color: #039be5; text-decoration: none; font-weight: 500; }
+      .auth-toggle a:hover { text-decoration: underline; }
+      @media (max-width: 600px) {
+        body, #message { margin-top: 0; background: white; box-shadow: none; }
+        body { border-top: 16px solid #ffa100; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message">
+      <div id="auth-container">
+        <div id="login-section">
+          <h2>Login</h2>
+          <form id="login-form">
+            <input type="email" id="login-email" placeholder="Email" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <button type="submit">Login</button>
+          </form>
+          <p class="auth-toggle">Don't have an account? <a href="#" id="go-to-signup">Sign Up</a></p>
+        </div>
+        <div id="signup-section" style="display: none;">
+          <h2>Sign Up</h2>
+          <form id="signup-form">
+            <input type="email" id="signup-email" placeholder="Email" required>
+            <input type="password" id="signup-password" placeholder="Password" minlength="6" required>
+            <button type="submit">Sign Up</button>
+          </form>
+          <p class="auth-toggle">Already have an account? <a href="#" id="go-to-login">Login</a></p>
+        </div>
+        <p id="error-message"></p>
+      </div>
+      <div id="user-dashboard" style="display: none;">
+        <h2>Welcome!</h2>
+        <p>You are signed in.</p>
+        <p id="user-email"></p>
+        <p id="user-created-at"></p>
+        <button id="logout-button">Logout</button>
+      </div>
+    </div>
+    <p id="load">Firebase SDK Loading&hellip;</p>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const loadEl = document.querySelector('#load');
+
+        try {
+          const app = firebase.app();
+          const features = [
+            'auth', 
+            'database', 
+            'firestore',
+            'functions',
+            'messaging', 
+            'storage', 
+            'analytics', 
+            'remoteConfig',
+            'performance',
+          ].filter(feature => typeof app[feature] === 'function');
+          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
+
+          const auth = firebase.auth();
+          const firestore = firebase.firestore();
+          const loginForm = document.getElementById('login-form');
+          const signupForm = document.getElementById('signup-form');
+          const errorMessage = document.getElementById('error-message');
+          const authContainer = document.getElementById('auth-container');
+          const userDashboard = document.getElementById('user-dashboard');
+          const userEmailEl = document.getElementById('user-email');
+          const userCreatedAtEl = document.getElementById('user-created-at');
+          const logoutButton = document.getElementById('logout-button');
+          const loginSection = document.getElementById('login-section');
+          const signupSection = document.getElementById('signup-section');
+          const goToSignup = document.getElementById('go-to-signup');
+          const goToLogin = document.getElementById('go-to-login');
+
+          // --- Auth Form Toggling ---
+          goToSignup.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginSection.style.display = 'none';
+            signupSection.style.display = 'block';
+            errorMessage.textContent = '';
+          });
+
+          goToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            signupSection.style.display = 'none';
+            loginSection.style.display = 'block';
+            errorMessage.textContent = '';
+          });
+
+          // --- Firebase Auth Handlers ---
+
+          // Handle Login
+          loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            errorMessage.textContent = '';
+            const email = loginForm['login-email'].value;
+            const password = loginForm['login-password'].value;
+
+            auth.signInWithEmailAndPassword(email, password)
+              .catch((error) => {
+                errorMessage.textContent = error.message;
+                console.error('Login error:', error);
+              });
+          });
+
+          // Handle Sign Up
+          signupForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            errorMessage.textContent = ''; // Clear previous errors
+            const email = signupForm['signup-email'].value;
+            const password = signupForm['signup-password'].value;
+
+            auth.createUserWithEmailAndPassword(email, password)
+              .then((userCredential) => {
+                // After successful sign up, create a document in Firestore
+                const user = userCredential.user;
+                return firestore.collection('users').doc(user.uid).set({
+                  email: user.email,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+              })
+              .catch((error) => {
+                errorMessage.textContent = error.message;
+                console.error('Sign up error:', error);
+              });
+          });
+
+          // Handle Logout
+          logoutButton.addEventListener('click', () => {
+            auth.signOut();
+          });
+
+          // Listen for auth state changes to update the UI
+          auth.onAuthStateChanged(user => {
+            if (user) {
+              // User is signed in.
+              authContainer.style.display = 'none';
+              userDashboard.style.display = 'block';
+
+              // Fetch user data from Firestore
+              firestore.collection('users').doc(user.uid).get().then(doc => {
+                if (doc.exists) {
+                  const userData = doc.data();
+                  userEmailEl.textContent = `Email: ${userData.email}`;
+                  if (userData.createdAt) {
+                    userCreatedAtEl.textContent = `Member since: ${userData.createdAt.toDate().toLocaleString()}`;
+                  }
+                } else {
+                  // Fallback if doc doesn't exist (should not happen in normal flow)
+                  userEmailEl.textContent = `Email: ${user.email}`;
+                }
+              });
+            } else {
+              // User is signed out.
+              authContainer.style.display = 'block';
+              userDashboard.style.display = 'none';
+              // Reset to login view
+              loginSection.style.display = 'block';
+              signupSection.style.display = 'none';
+              loginForm.reset();
+              signupForm.reset();
+              userEmailEl.textContent = '';
+              userCreatedAtEl.textContent = '';
+              errorMessage.textContent = '';
+            }
+          });
+        } catch (e) {
+          console.error(e);
+          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+        }
+      });
+    </script>
+  </body>
+</html>

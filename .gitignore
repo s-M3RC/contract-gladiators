@@ -1,0 +1,8 @@
+# Secret files - NEVER commit these!
+client_secret_*.json
+
+# Firebase auto-generated files
+.firebase/
+firebase.json.local
+firebase-debug.log
+firestore-debug.log

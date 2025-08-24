@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Gladiators</title>
+    <!-- Use the Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Modal overlay styling */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 p-4 sm:p-8">
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto py-8">
+        <!-- Header Section -->
+        <header class="text-center mb-12">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-white mb-2">Fantasy Gladiator</h1>
+            <p class="text-lg text-gray-400">Assemble your gladiator team with weekly contracts and a dynamic player market.</p>
+        </header>
+
+        <!-- Player ID & Loading Indicator -->
+        <div class="text-center text-gray-400 mb-6">
+            <p>Your Player ID: <span id="user-id" class="font-mono text-sm text-gray-500">Loading...</span></p>
+            <div id="loading-indicator" class="mt-4 text-green-400 hidden">Loading game data...</div>
+        </div>
+
+        <!-- Game Rules Section -->
+        <section class="bg-gray-800 rounded-2xl p-6 sm:p-8 shadow-lg mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-white">How It Works</h2>
+            <ul class="list-disc list-inside space-y-2 text-gray-300">
+                <li>You start with a budget of $100.</li>
+                <li>Players are not drafted; you bid on them each week for a short-term contract (1-4 games).</li>
+                <li>The player market refreshes every Tuesday with new free agents and players whose contracts have expired.</li>
+                <li>The highest bidder wins the contract. Manage your budget wisely!</li>
+                <li>Scoring is standard PPR. Win the weekly matchup to earn more budget and glory.</li>
+            </ul>
+        </section>
+
+        <!-- Your Team & Roster Section -->
+        <section class="mb-12">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Your Gladiator Team</h2>
+                <div class="flex items-center space-x-4 mt-4 sm:mt-0">
+                    <span class="text-lg text-gray-400">Budget:</span>
+                    <span id="player-budget" class="text-2xl font-bold text-green-400">$100</span>
+                </div>
+            </div>
+
+            <!-- Roster Grid - Will be populated by JS from Firestore -->
+            <div id="roster-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <p class="text-center text-gray-500 col-span-full">Your team roster will appear here after you sign players.</p>
+            </div>
+        </section>
+
+        <!-- Player Market Section -->
+        <section>
+            <h2 class="text-2xl font-bold mb-6 text-white">The Player Market</h2>
+            <!-- Market Grid - Will be populated by JS from Firestore -->
+            <div id="market-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <p class="text-center text-gray-500 col-span-full">The player market is loading...</p>
+            </div>
+        </section>
+    </div>
+
+    <!-- Bidding Modal (Hidden by default) -->
+    <div id="bid-modal" class="fixed inset-0 flex items-center justify-center hidden modal-overlay">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4">
+            <h3 id="modal-player-name" class="text-2xl font-bold text-white mb-2"></h3>
+            <p id="modal-player-team" class="text-gray-400 mb-4"></p>
+            <div class="space-y-4">
+                <p class="text-gray-300"><span id="modal-player-price" class="font-bold text-purple-400"></span> Est. Price</p>
+                <div class="relative">
+                    <label for="bid-input" class="block text-sm font-medium text-gray-400">Your Bid:</label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500">$</span>
+                        </div>
+                        <input type="number" id="bid-input" class="block w-full rounded-md bg-gray-700 border-gray-600 pl-7 pr-12 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 sm:text-sm" placeholder="e.g. 16">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="cancel-bid" class="px-4 py-2 rounded-full bg-gray-600 hover:bg-gray-700 text-white font-semibold transition-colors">Cancel</button>
+                <button id="submit-bid" class="px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors">Submit Bid</button>
+            </div>
+            <div id="modal-message-box" class="mt-4 text-center text-red-400 hidden"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase services
+        let db;
+        let auth;
+        let userId;
+        let allPlayers = []; // Now a live list from Firestore
+
+        // Game state and UI elements
+        const rosterContainer = document.getElementById('roster-container');
+        const marketContainer = document.getElementById('market-container');
+        const budgetDisplay = document.getElementById('player-budget');
+        const userIdDisplay = document.getElementById('user-id');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const modal = document.getElementById('bid-modal');
+        const modalPlayerName = document.getElementById('modal-player-name');
+        const modalPlayerTeam = document.getElementById('modal-player-team');
+        const modalPlayerPrice = document.getElementById('modal-player-price');
+        const bidInput = document.getElementById('bid-input');
+        const submitBidBtn = document.getElementById('submit-bid');
+        const cancelBidBtn = document.getElementById('cancel-bid');
+        const messageBox = document.getElementById('modal-message-box');
+
+        // --- Helper Functions ---
+
+        /**
+         * Renders a single player card for either the roster or market.
+         * @param {object} player - The player object to render.
+         * @param {string} type - 'roster' or 'market' to determine card styling.
+         * @returns {string} - The HTML string for the player card.
+         */
+        const renderPlayerCard = (player, type) => {
+            const cardClass = type === 'roster' ? 'hover:border-blue-500' : 'hover:border-purple-500';
+            const priceOrContract = type === 'roster' ? 
+                `<div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
+                    <span>Contract:</span>
+                    <span class="font-medium text-yellow-400">${player.contract} Games</span>
+                </div>` :
+                `<div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
+                    <span>Est. Price:</span>
+                    <span class="font-medium text-purple-400">$${player.estPrice}</span>
+                </div>`;
+            const actionButton = type === 'market' ?
+                `<button data-player-id="${player.id}" class="bid-btn bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full transition-colors duration-200">Bid</button>` :
+                '';
+            
+            return `
+                <div class="bg-gray-800 rounded-xl shadow-md p-6 border-2 border-transparent ${cardClass} transition-colors duration-200">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-4">
+                            <img src="https://placehold.co/60x60/333333/ffffff?text=${player.position}" alt="Player Icon" class="rounded-full">
+                            <div>
+                                <h3 class="text-lg font-semibold text-white">${player.name}</h3>
+                                <p class="text-gray-400">${player.team}</p>
+                            </div>
+                        </div>
+                        ${actionButton}
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-300">
+                        <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
+                            <span>Position:</span>
+                            <span class="font-medium text-white">${player.position}</span>
+                        </div>
+                        ${priceOrContract}
+                        <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center col-span-2">
+                            <span>Points (Week 1):</span>
+                            <span class="font-medium text-white">${player.points !== null ? player.points : '--'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        /**
+         * Renders all players on the user's roster.
+         */
+        const renderRoster = () => {
+            const rosteredPlayers = allPlayers.filter(p => p.ownerId === userId);
+            if (rosteredPlayers.length === 0) {
+                rosterContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">Your team roster will appear here after you sign players.</p>';
+            } else {
+                rosterContainer.innerHTML = rosteredPlayers.map(p => renderPlayerCard(p, 'roster')).join('');
+            }
+        };
+
+        /**
+         * Renders all available players in the market.
+         */
+        const renderMarket = () => {
+            const marketPlayers = allPlayers.filter(p => !p.ownerId);
+            if (marketPlayers.length === 0) {
+                 marketContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">There are no players currently available in the market.</p>';
+            } else {
+                marketContainer.innerHTML = marketPlayers.map(p => renderPlayerCard(p, 'market')).join('');
+            }
+        };
+
+        /**
+         * Updates the budget display on the page.
+         */
+        const updateBudgetDisplay = (budget) => {
+            budgetDisplay.textContent = `$${budget}`;
+            if (budget < 25) {
+                budgetDisplay.classList.remove('text-green-400');
+                budgetDisplay.classList.add('text-red-400');
+            } else {
+                budgetDisplay.classList.remove('text-red-400');
+                budgetDisplay.classList.add('text-green-400');
+            }
+        };
+
+        /**
+         * Shows the bidding modal for a specific player.
+         * @param {number} playerId - The ID of the player to bid on.
+         */
+        const showModal = (playerId) => {
+            const player = allPlayers.find(p => p.id === playerId);
+            if (!player) return;
+
+            modal.dataset.playerId = playerId;
+            modalPlayerName.textContent = player.name;
+            modalPlayerTeam.textContent = player.team;
+            modalPlayerPrice.textContent = `$${player.estPrice}`;
+            bidInput.value = '';
+            messageBox.textContent = '';
+            messageBox.classList.add('hidden');
+            modal.classList.remove('hidden');
+        };
+
+        /**
+         * Hides the bidding modal.
+         */
+        const hideModal = () => {
+            modal.classList.add('hidden');
+        };
+
+        // --- Firebase Functions ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        const setupFirebase = async () => {
+            try {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Correctly check if the global variable exists before using it.
+                if (typeof __initial_auth_token === 'string' && __initial_auth_token.length > 0) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = userId;
+                        initializeGame();
+                    } else {
+                        // User is signed out.
+                        userId = null;
+                        userIdDisplay.textContent = 'Signed Out';
+                        loadingIndicator.classList.add('hidden');
+                        rosterContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please sign in to view your roster.</p>';
+                        marketContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please sign in to view the market.</p>';
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase setup failed: ", error);
+                loadingIndicator.textContent = "Error loading game. Please try again later.";
+                loadingIndicator.classList.remove('hidden');
+            }
+        };
+
+        const initializeGame = async () => {
+            if (!db || !userId) return;
+
+            loadingIndicator.classList.remove('hidden');
+
+            // Set up a listener for the user's budget
+            const userDocRef = doc(db, `/artifacts/${appId}/users/${userId}/gameData/budget`);
+            onSnapshot(userDocRef, (docSnap) => {
+                let budget = 100; // Default budget
+                if (docSnap.exists()) {
+                    budget = docSnap.data().value;
+                } else {
+                    // Create the initial budget document if it doesn't exist
+                    setDoc(userDocRef, { value: 100 }, { merge: true }).catch(console.error);
+                }
+                updateBudgetDisplay(budget);
+            }, (error) => console.error("Error fetching budget:", error));
+
+            // Set up a listener for all players in the database (public data)
+            const playersColRef = collection(db, `/artifacts/${appId}/public/data/players`);
+            onSnapshot(playersColRef, (querySnapshot) => {
+                allPlayers = [];
+                querySnapshot.forEach((doc) => {
+                    allPlayers.push({ id: doc.id, ...doc.data() });
+                });
+                renderRoster();
+                renderMarket();
+                loadingIndicator.classList.add('hidden');
+            }, (error) => console.error("Error fetching players:", error));
+        };
+
+        const generateInitialPlayers = async () => {
+            const players = [
+                { id: "1", name: "Patrick Mahomes", team: "Kansas City Chiefs", position: "QB", contract: null, points: null, ownerId: null, estPrice: 20 },
+                { id: "2", name: "Christian McCaffrey", team: "San Francisco 49ers", position: "RB", contract: null, points: null, ownerId: null, estPrice: 25 },
+                { id: "3", name: "Justin Jefferson", team: "Minnesota Vikings", position: "WR", contract: null, points: null, ownerId: null, estPrice: 22 },
+                { id: "4", name: "Travis Kelce", team: "Kansas City Chiefs", position: "TE", contract: null, points: null, ownerId: null, estPrice: 18 },
+                { id: "5", name: "Kyren Williams", team: "Los Angeles Rams", position: "RB", contract: null, points: null, ownerId: null, estPrice: 15 },
+                { id: "6", name: "Amon-Ra St. Brown", team: "Detroit Lions", position: "WR", contract: null, points: null, ownerId: null, estPrice: 17 },
+                { id: "7", name: "Puka Nacua", team: "Los Angeles Rams", position: "WR", contract: null, points: null, ownerId: null, estPrice: 16 },
+                { id: "8", name: "Jalen Hurts", team: "Philadelphia Eagles", position: "QB", contract: null, points: null, ownerId: null, estPrice: 19 },
+                { id: "9", name: "Josh Allen", team: "Buffalo Bills", position: "QB", contract: null, points: null, ownerId: null, estPrice: 21 },
+                { id: "10", name: "Garrett Wilson", team: "New York Jets", position: "WR", contract: null, points: null, ownerId: null, estPrice: 12 },
+                { id: "11", name: "Breece Hall", team: "New York Jets", position: "RB", contract: null, points: null, ownerId: null, estPrice: 14 },
+                { id: "12", name: "George Kittle", team: "San Francisco 49ers", position: "TE", contract: null, points: null, ownerId: null, estPrice: 8 },
+            ];
+
+            const playersColRef = collection(db, `/artifacts/${appId}/public/data/players`);
+            const promises = players.map(player => setDoc(doc(playersColRef, player.id), player));
+            await Promise.all(promises);
+            console.log("Initial players generated in Firestore.");
+        };
+
+        /**
+         * Handles the submission of a bid.
+         */
+        const handleBidSubmit = async () => {
+            const playerId = modal.dataset.playerId;
+            const bidAmount = parseInt(bidInput.value, 10);
+            const player = allPlayers.find(p => p.id === playerId);
+
+            if (!player || !db || !userId) return;
+
+            if (isNaN(bidAmount) || bidAmount <= 0) {
+                messageBox.textContent = 'Please enter a valid bid amount.';
+                messageBox.classList.remove('hidden');
+                return;
+            }
+
+            // Get current budget and check if bid is valid
+            const userDocRef = doc(db, `/artifacts/${appId}/users/${userId}/gameData/budget`);
+            const userDocSnap = await getDoc(userDocRef);
+            let currentBudget = userDocSnap.exists() ? userDocSnap.data().value : 0;
+            if (bidAmount > currentBudget) {
+                messageBox.textContent = 'Your bid exceeds your current budget!';
+                messageBox.classList.remove('hidden');
+                return;
+            }
+
+            // A more advanced version would use a transaction to prevent race conditions.
+            // For this demo, we'll do a simple update.
+            const playerDocRef = doc(db, `/artifacts/${appId}/public/data/players/${playerId}`);
+            await setDoc(playerDocRef, {
+                ownerId: userId,
+                contract: Math.floor(Math.random() * 4) + 1, // Assign a random contract duration (1-4 games)
+                cost: bidAmount,
+                points: (Math.random() * 30).toFixed(1) // Simulate week 1 points
+            }, { merge: true });
+
+            // Update user's budget
+            const newBudget = currentBudget - bidAmount;
+            await setDoc(userDocRef, { value: newBudget }, { merge: true });
+
+            hideModal();
+        };
+
+        // Event listener for the "Submit Bid" button in the modal
+        submitBidBtn.addEventListener('click', handleBidSubmit);
+
+        // Event listener for the "Cancel Bid" button in the modal
+        cancelBidBtn.addEventListener('click', hideModal);
+
+        // Event listener for the 'Bid' buttons using event delegation on the market container
+        marketContainer.addEventListener('click', (event) => {
+            const bidButton = event.target.closest('.bid-btn');
+            if (bidButton) {
+                const playerId = bidButton.dataset.playerId;
+                showModal(playerId);
+            }
+        });
+
+        // Initial setup of Firebase
+        document.addEventListener('DOMContentLoaded', () => {
+            loadingIndicator.classList.remove('hidden');
+            setupFirebase();
+        });
+    </script>
+</body>
+</html>
